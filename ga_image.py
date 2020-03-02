@@ -13,6 +13,7 @@ import random
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 class Agent(object):
     def __init__(self,length):
@@ -30,7 +31,7 @@ class Agent(object):
 in_img=None
 in_img_size=None
 population=20
-generations=1000
+generations=300
 mutation_rate=0.03
 
 values=[0,1]
@@ -55,12 +56,14 @@ def ga():
     agents = init_agents(population, in_img_size)
     
     for generation in range(generations):
-        print('Generation: '+str(generation))
+        print('Generation: '+str(generation)+' Fit: '+str(agents[0].fitness))
         
-        plt.imsave(str(generation)+'.png',np.reshape(agents[0].arr,(50,50)))
         
         agents=fitness(agents)
         agents=selection(agents)
+        
+        plt.imsave(savefile+'/'+str(generation)+'.png',~np.reshape(agents[0].arr,(in_x,in_y)),cmap='Blues')
+
         agents=crossover(agents)
         agents=mutation(agents,mutation_rate)
         
@@ -143,14 +146,21 @@ def black_and_white(img):
     return arr.astype(int)
 
 if __name__=='__main__':
+    in_img_name='logo-10-12.png'
     #Load image to be recreated by genetic algorithm
-    in_img=np.array(Image.open('simplified-logo-small.png'))
+    in_img=np.array(Image.open('./'+in_img_name))
     
     #Convert image to black and white to limit the potential values for each pixel
     in_img=black_and_white(in_img)
+    in_x,in_y=in_img.shape
     
     #Convert image to a 1-d array so that the genetic algorithm can treat it like a list
     in_img=np.reshape(in_img,(1,-1))[0]
     
     in_img_size=len(in_img)
+    
+    savefile='./'+in_img_name.split('.')[0]
+    if os.path.exists(savefile)!=True:
+        os.makedirs(savefile)
+    
     ga()

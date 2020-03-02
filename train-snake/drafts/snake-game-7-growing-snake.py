@@ -181,7 +181,7 @@ def redrawGameWindow():
 # =============================================================================
 
 def main():
-    global game_on, grid, win, severus, colors,food, grid_rows,grid_columns
+    global game_on, grid, win, severus, colors,food
     
     #SET INITIAL CONDITIONS
     clock=pygame.time.Clock()
@@ -201,7 +201,6 @@ def main():
             'violet':(148,0,211)}
     
     colors=['red','orange','yellow','green','blue','indigo','violet']
-    
     
     #CREATE INITIAL OBJECTS
     #Square grid the same width as the window
@@ -271,17 +270,6 @@ def main():
             while food_loc in severus.snake_space():
                 food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
             food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)])
-        else:
-            #If the snake bites its tail or wanders into the hunting zone end the game
-            #note if snake does not move off of food in one frame it will register as biting its tail
-            x,y=severus.components[0].position
-            if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows) or ((x,y) in severus.snake_space()[1:]):
-                print('game_off')
-                #game over because of biting tail or out of bounds
-                game_on=False
-        
-        if not game_on:
-            print('snake injured at ('+str(x)+','+str(y)+')')
                 
         
         #REDRAW GAME WINDOW

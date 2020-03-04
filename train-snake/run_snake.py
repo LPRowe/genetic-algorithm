@@ -7,3 +7,8 @@ Created on Tue Mar  3 14:34:58 2020
 
 import snake_game
 
+snake_game.main()
+
+while True:
+    if snake_game.game_on==False:
+        snake_game.main()

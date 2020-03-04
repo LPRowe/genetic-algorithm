@@ -286,7 +286,7 @@ def main():
         
         keys=pygame.key.get_pressed()
         #TRACK INPUTS FROM MOUSE/KEYBOARD HERE
-        if keys[pygame.K_LEFT] and severus.direction!=(1,0):
+        if (keys[pygame.K_LEFT] and severus.direction!=(1,0)) or severus.direction==(-1,0):
             #Only allow a left turn if the snake is not going right
             
             #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
@@ -297,17 +297,17 @@ def main():
             severus.direction=(-1,0)
             
             
-        if keys[pygame.K_RIGHT] and severus.direction!=(-1,0):
+        if (keys[pygame.K_RIGHT] and severus.direction!=(-1,0)) or severus.direction==(1,0):
             severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(1,0)
             
-        if keys[pygame.K_UP] and severus.direction!=(0,1):
+        if (keys[pygame.K_UP] and severus.direction!=(0,1)) or severus.direction==(0,-1):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,-1)
             
-        if keys[pygame.K_DOWN] and severus.direction!=(0,-1):
+        if (keys[pygame.K_DOWN] and severus.direction!=(0,-1)) or severus.direction==(0,1):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,1)

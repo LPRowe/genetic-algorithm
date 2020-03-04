@@ -10,40 +10,6 @@ import numpy as np
 
 pygame.init()
 
-# =============================================================================
-# LOAD GRAPHICS
-# =============================================================================
-
-
-
-# =============================================================================
-# LOAD SOUND EFFECTS AND MUSIC
-# =============================================================================
-
-
-
-# =============================================================================
-# SCALE SURFACES ACCORDING TO WINDOW SIZE
-# =============================================================================
-
-
-
-# =============================================================================
-# ADD ALPHA CHANNELS TO IMAGES WITH OPAQUE BACKGROUNDS
-# =============================================================================
-
-
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
-
-
-
-# =============================================================================
-# CREATE OBJECTS TO INTERACT WITH
-# =============================================================================
-
-
 class Snake(object):
     def __init__(self,direction,component):
         
@@ -170,9 +136,29 @@ class GridBoard(object):
         pygame.draw.rect(win,self.border_color,(self.x,self.y,self.width,self.height),self.border_thickness)
 
 class ScoreBoard(object):
-    def __init__(self,**properties):
+    def __init__(self,score,shape,**properties):
+        self.score=score
+        self.shape=shape
+        self.high_score=severus.length()
+        
+        self.font=pygame.font.SysFont('tahoma',int(0.5*self.shape[1]),bold=True)
+        
         for key,val in properties.items():
             setattr(self, k, v)
+    
+    def draw(self):
+        
+        if self.score>=self.high_score:
+            self.font_color=(0,200,0)
+        else:
+            self.font_color=(200,200,200)
+        
+        #Add text for the score
+        score_text=self.font.render('Score: '+str(int(self.score)),1,self.font_color)
+        win.blit(score_text,(10,int(0.5*(self.shape[1]-score_text.get_size()[1]))))
+        
+        high_score_text=self.font.render('High Score: '+str(int(self.high_score)),1,self.font_color)
+        win.blit(high_score_text,(win_width-10-high_score_text.get_size()[0],int(0.5*(self.shape[1]-high_score_text.get_size()[1]))))
         
 # =============================================================================
 # REDRAW GAME WINDOW     
@@ -185,19 +171,29 @@ def redrawGameWindow():
     grid.draw()
     severus.draw()
     food.draw()
+    header.draw()
+    win.blit(snake_icon,(int(0.5*(win_width-snake_icon.get_size()[0])),int(0.5*(header.shape[1]-snake_icon.get_size()[1]))))
     
     pygame.display.update()
 
 # =============================================================================
-# MAIN LOOP AND INITIAL CONDITIONS
+# INITIAL CONDITIONS FOLLOWED BY RUN LOOP
 # =============================================================================
 
 def main():
-    global game_on, grid, win, severus, colors,food, grid_rows,grid_columns, win_width, win_height
+    #objects
+    global grid, win, severus, food, header
+    
+    #dimensions
+    global grid_rows,grid_columns, win_width, win_height
+    
+    #flags and values
+    global colors, game_on, snake_icon
     
     #SET INITIAL CONDITIONS
     clock=pygame.time.Clock()
-    win_width,win_height=500,650
+    win_width=500
+    win_height=win_width+50
     win=pygame.display.set_mode((win_width,win_height))
     
     #Size of grid for snake to move on
@@ -214,13 +210,22 @@ def main():
     
     colors=['red','orange','yellow','green','blue','indigo','violet']
     
-    
+    game_on=True
+
     #CREATE INITIAL OBJECTS
     #Square grid the same width as the window
-    game_on=True
     grid=GridBoard(grid_columns,grid_rows,win_width,win_width,(0,win_height-win_width))
     
+    #Snake
     severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'))
+    
+    #Score Board
+    header=ScoreBoard(severus.length(),(win_width,win_height-win_width))
+    
+    #Score Board Snake Icon Resized to fit scoreboard
+    snake_icon=pygame.image.load('./images/snake-image-alpha-removed.png')
+    snake_icon_ratio=1280/960
+    snake_icon=pygame.transform.scale(snake_icon,(int(snake_icon_ratio*0.8*header.shape[1]),int(0.8*header.shape[1])))
     
     #Add food to the map in a location that the snake does not inhabit
     food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
@@ -228,6 +233,8 @@ def main():
         food_loc=tuple(np.random.randint(1,grid_columns),np.random.randint(1,grid_rows))
 
     food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape)
+
+
 
     run=True
     while run:
@@ -246,7 +253,7 @@ def main():
         
         keys=pygame.key.get_pressed()
         #TRACK INPUTS FROM MOUSE/KEYBOARD HERE
-        if keys[pygame.K_LEFT] and severus.direction!=(1,0):
+        if (keys[pygame.K_LEFT] and severus.direction!=(1,0)) or severus.direction==(-1,0):
             #Only allow a left turn if the snake is not going right
             
             #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
@@ -257,17 +264,17 @@ def main():
             severus.direction=(-1,0)
             
             
-        if keys[pygame.K_RIGHT] and severus.direction!=(-1,0):
+        if (keys[pygame.K_RIGHT] and severus.direction!=(-1,0)) or severus.direction==(1,0):
             severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(1,0)
             
-        if keys[pygame.K_UP] and severus.direction!=(0,1):
+        if (keys[pygame.K_UP] and severus.direction!=(0,1)) or severus.direction==(0,-1):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,-1)
             
-        if keys[pygame.K_DOWN] and severus.direction!=(0,-1):
+        if (keys[pygame.K_DOWN] and severus.direction!=(0,-1)) or severus.direction==(0,1):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,1)
@@ -278,11 +285,18 @@ def main():
             #elongate snake with color of food
             severus.components.append(SnakeComponent(grid.square_width,severus.tail.position,food.color,shape=food.shape))
             
+            #update the score
+            header.score=severus.length()
+            
+            if header.score>=header.high_score:
+                header.high_score=header.score
+            
             #generate new food at a location not on the snake
             food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
             while food_loc in severus.snake_space():
                 food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
             food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)])
+            
         else:
             #If the snake bites its tail or wanders into the hunting zone the snake becomes injured
             #note if snake does not move off of food in one frame it will register as biting its tail
@@ -290,9 +304,19 @@ def main():
             if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows) or ((x,y) in severus.snake_space()[1:]):
                 #game over because of biting tail or out of bounds
                 game_on=False
+                
+            #If the snake tries to go out of bounds reset the head to the tail
+            if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows):
+                severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'))
         
         if not game_on:
             print('snake injured at ('+str(x)+','+str(y)+')')
+            if header.high_score<=severus.length():
+                header.high_score=severus.length()
+            if severus.length()>2:
+                severus.components=severus.components[:2]
+            header.score=severus.length()
+            #run=False
             game_on=True
                 
         
@@ -302,8 +326,8 @@ def main():
     
     pygame.quit()
         
-        
-main()
+if __name__=='__main__':
+    main()
         
         
         

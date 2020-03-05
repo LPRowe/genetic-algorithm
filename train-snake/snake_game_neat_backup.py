@@ -63,7 +63,7 @@ class Snake(object):
     
     
     def length(self):
-        return len(self.components)        
+        return len(self.components)    
             
             
         

@@ -196,7 +196,7 @@ class ScoreBoard(object):
 # INPUT VALUES FOR NEURAL NETWORK ARE OUTPUT VALUES FROM WHAT SNAKE SEES
 # =============================================================================
 
-def snakeVision(snake,food,obstruction_connections=False):
+def snakeVision(snake,food):
     '''
     Takes the snake of interest and current food as inputs returns an output
     of 20 values that the snake sees and a list of the locations of obstructions.
@@ -289,33 +289,32 @@ def snakeVision(snake,food,obstruction_connections=False):
     #add another copy of the obstruction to the right, to the end of the list
     obstructions.append(obstructions[0])
     
-    if obstruction_connections:
-        #check if each obstruction is connected to the one located CCW from it
-        for idx,obstruction in enumerate(obstructions[:-1]):
+    #check if each obstruction is connected to the one located CCW from it
+    for idx,obstruction in enumerate(obstructions[:-1]):
+        
+        if (obstruction not in snake_space) and (obstructions[idx+1] not in snake_space):
             
-            if (obstruction not in snake_space) and (obstructions[idx+1] not in snake_space):
-                
-                #if both obstructions are on the wall, then yes they are connected
-                outputs.append(grid_rows) #will be normalized with other distances later
-                
-            elif (obstruction in snake_space) and (obstructions[idx+1] in snake_space):
-                
-                #if both obstructions are on the snake's body, then yes they are connected
+            #if both obstructions are on the wall, then yes they are connected
+            outputs.append(grid_rows) #will be normalized with other distances later
+            
+        elif (obstruction in snake_space) and (obstructions[idx+1] in snake_space):
+            
+            #if both obstructions are on the snake's body, then yes they are connected
+            outputs.append(grid_rows)
+            
+        else:
+            snake_is_touching_wall=False
+            #If a part of the snake is adjacent to the wall, then yes they are connected
+            for position in snake_space:
+                x,y=position
+                if (x<1 or x>=grid_columns-1) or not (y<2 or y>grid_rows-1):
+                    snake_is_touching_wall=True
+            
+            if snake_is_touching_wall:
                 outputs.append(grid_rows)
-                
             else:
-                snake_is_touching_wall=False
-                #If a part of the snake is adjacent to the wall, then yes they are connected
-                for position in snake_space:
-                    x,y=position
-                    if (x<1 or x>=grid_columns-1) or not (y<2 or y>grid_rows-1):
-                        snake_is_touching_wall=True
-                
-                if snake_is_touching_wall:
-                    outputs.append(grid_rows)
-                else:
-                    #Snake is not touching the wall
-                    outputs.append(-grid_rows)
+                #Snake is not touching the wall
+                outputs.append(-grid_rows)
     
     #Lastly lets tell the snake what direction it is currently headed:
     #horizontal: (-1,0) --> -1 | (1,0) --> 1  | (0,+/- 1) --> 0
@@ -660,7 +659,7 @@ def evalGenomes(genomes, config):
             
             #Set the speed the game runs at playing: (50,20) | training (0,comment out)
             #pygame.time.delay(0)
-            clock.tick(100)
+            clock.tick(20)
             
             #Every time step, severus loses one energy [kcal]
             severus.energy-=1
@@ -680,7 +679,7 @@ def evalGenomes(genomes, config):
             # =============================================================================
             #Increase the snakes fitness for each frame it has lived 
             #(reward for finding food=100*reward for staying alive 1 frame)
-            ge[index].fitness += 0.05
+            ge[index].fitness += 0.01
             
             #Output the snake vision to the neural net
             snake_output,obstructions = snakeVision(severus,food)
@@ -689,7 +688,7 @@ def evalGenomes(genomes, config):
             nn_output = nets[index].activate(tuple(snake_output))
             
             #Perform action suggested by nn_output
-            snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
+            snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN'}
             
             #OUTPUT FROM NEURAL NET (NN_OUTPUT) DRIVES THE SNAKE
             if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)) or severus.direction==(-1,0):
@@ -765,7 +764,7 @@ def evalGenomes(genomes, config):
                 
             #If snake died of starvation, bit its tail or hit a wall
             if not game_on:
-                #print('snake injured at ('+str(x)+','+str(y)+')')
+                print('snake injured at ('+str(x)+','+str(y)+')')
                 if header.high_score<=severus.length():
                     header.high_score=severus.length()
                 
@@ -793,8 +792,6 @@ def evalGenomes(genomes, config):
     
 
 def run(config_file):
-    global p, stats, winner
-    
     # Load configuration.
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
@@ -802,24 +799,28 @@ def run(config_file):
 
     # Create the population, which is the top-level object for a NEAT run.
     p = neat.Population(config)
-    #p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-27')
 
     # Add a stdout reporter to show progress in the terminal.
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
-    p.add_reporter(neat.Checkpointer(1))
+    p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 300 generations.
-    winner = p.run(evalGenomes, 20)
+    winner = p.run(evalGenomes, 10)
 
     # Display the winning genome.
     print('\nBest genome:\n{!s}'.format(winner))
 
-    node_names = {0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
+    node_names = {0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN'}
     visualize.draw_net(config, winner, True, node_names=node_names)
     visualize.plot_stats(stats, ylog=False, view=True)
-    visualize.plot_species(stats, view=True)    
+    visualize.plot_species(stats, view=True)
+
+    p = neat.Checkpointer.restore_checkpoint('neat-checkpoint-4')
+    
+    #run for up to N generations
+    p.run(evalGenomes, 10)
 
 
 if __name__ == '__main__':
@@ -829,8 +830,6 @@ if __name__ == '__main__':
     local_dir = os.path.dirname(__file__)
     config_path = os.path.join(local_dir, 'config-feedforward')
     run(config_path)
-    
-    pygame.quit()
     
     #main()
     

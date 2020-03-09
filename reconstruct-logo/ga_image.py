@@ -135,6 +135,10 @@ def mutation(agents,mutation_rate):
     return agents
 
 def black_and_white(img):
+    '''Converts image to black and white:
+        
+        returns arr where arr[arr<np.mean(arr)]=0 and arr[arr>=np.mean(arr)]=1
+    '''
     arr=img[:,:,0]+img[:,:,1]+img[:,:,2]
     arr=arr/3
     

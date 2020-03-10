@@ -10,11 +10,11 @@ from __future__ import print_function
 import pygame
 import numpy as np
 import os
-import neat
-import visualize
 import tensorflow as tf
 from tensorflow import keras
 import pickle
+import time
+import matplotlib.pyplot as plt
 
 os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/'
 
@@ -202,7 +202,7 @@ class ScoreBoard(object):
 # INPUT VALUES FOR NEURAL NETWORK ARE OUTPUT VALUES FROM WHAT SNAKE SEES
 # =============================================================================
 
-def snakeVision(snake,food,obstruction_connections=False):
+def snakeVision(snake,food,obstruction_connections=True):
     '''
     Takes the snake of interest and current food as inputs returns an output
     of 20 values that the snake sees and a list of the locations of obstructions.
@@ -424,7 +424,7 @@ def main():
     
     
     #Energy that each food contains
-    food_energy=200
+    food_energy=300
     
     
     #flag for whether the snake is alive
@@ -571,13 +571,21 @@ def main():
     pygame.quit()
     
 
-def scale(arr,minimum=-2,maximum=2):
-    ''' Scale a np.random.rand array to range from minimum to maximum'''
-    return (arr-0.5)*(maximum-minimum)
-
-        
-def evalGenomes(population, generations, initial_config=False):
-
+def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.03, mutation_range=[-2,2], nn_shape=[20,12,8,4], activation_functions=['tanh','tanh','tanh','softmax'], initial_config=False):
+    '''
+    population: the number of snakes in each generation
+    generations: the number of generations you wish to run the evolution process for
+    
+    mutation rate: probability of a gene mutating
+    mutation_range: the min and max possible mutated value
+    nn_shape: the shape of the neural net: input layer, hidden 1, hidden 2, ..., output
+    activation_functions: the function that will be used at layer1, layer2, ..., output
+    
+    initial_config: If False, the neural network will initiate with random weights on generation 1
+                    If initial_config='configuration_file_name.pkl' then neural net will use
+                    the weights from the pkl file, thus starting from a partially evolved state
+    
+    '''
     
     # =============================================================================
     # MAIN LOOP
@@ -594,6 +602,11 @@ def evalGenomes(population, generations, initial_config=False):
     
     #flags and values
     global colors, game_on, snake_icon, obstructions, snake_output, gen
+    
+    
+    
+    
+    
     
     gen=0
     
@@ -625,7 +638,7 @@ def evalGenomes(population, generations, initial_config=False):
     
     
     #Energy that each food contains
-    food_energy=200
+    food_energy=300
     
     
     #flag for whether the snake is alive
@@ -659,10 +672,16 @@ def evalGenomes(population, generations, initial_config=False):
 
     
 
-
     # =============================================================================
     # CREATE FIRST POPULATION OF SNAKES AND NEURAL NETWORKS
     # =============================================================================
+    #record the history of the performance of each generation of snakes
+    history={'best' : [],
+             'average' : [],
+             'std' : [],
+             'run_time' : []
+             }
+    
     nets = []
     snakes = []
     fitness = [0]*population
@@ -673,46 +692,29 @@ def evalGenomes(population, generations, initial_config=False):
             snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
             
             #weights for connections between nodes
-            conn_weights=[scale(np.random.rand(20,12)),scale(np.random.rand(12,8)),scale(np.random.rand(8,4))]
-            
+            #conn_weights=[scale(np.random.rand(20,12)),scale(np.random.rand(12,8)),scale(np.random.rand(8,4))]
+            conn_weights=[scale(np.random.rand(nn_shape[idx],nn_shape[idx+1])) for idx in range(len(nn_shape)-1)]
             #bias for each node
-            bias_weights=[scale(np.random.rand(12,)), scale(np.random.rand(8,)), scale(np.random.rand(4,))]
-
-            #activation function for each layer
-            activation_functions=['tanh','tanh','softmax']
+            #bias_weights=[scale(np.random.rand(12,)), scale(np.random.rand(8,)), scale(np.random.rand(4,))]
+            bias_weights=[scale(np.random.rand(nn_shape[idx+1],)) for idx in range(len(nn_shape)-1)]
             
             #create neural net with given weights and activation functions
             nets.append(make_nets(conn_weights,bias_weights,activation_functions))
     else:
         for i in range(population):
             snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
-        nets=pickle.load(initial_config)
+        nets,history=pickle.load(initial_config)
 
             
-            
-    
-        
+    #Decide how much the snake should be rewarded for each positive/negative action
+    reward_food = 2
+    reward_move = 0.01
+    reward_hit_wall = - 0.0
     
     for gen in range(generations):
-        '''
-        Between each batch of snakes running:
-            reset all fitnesses to zero
-            use GA to make new genes
-            generate new population of snakes
-            
-            - move this to after the for loop of snakes -
-        
-        
-        #Genomes will be flattened lists of the neural nets connection and bias weights
-        genes=[]
-        fitness=[0]*population
-        '''
-        
-        #gen+=1
-        
-        
-        
-        
+        t_start=time.time()
+        gen+=1
+
         #run loop
         for index,severus in enumerate(snakes):
             run=True
@@ -720,7 +722,7 @@ def evalGenomes(population, generations, initial_config=False):
                 
                 #Set the speed the game runs at playing: (50,20) | training (0,comment out)
                 #pygame.time.delay(0)
-                clock.tick(100)
+                #clock.tick(100)
                 
                 #Every time step, severus loses one energy [kcal]
                 severus.energy-=1
@@ -739,15 +741,17 @@ def evalGenomes(population, generations, initial_config=False):
                 # CONTROL SNAKE USING NEURAL NET      
                 # =============================================================================
                 #Increase the snakes fitness for each frame it has lived 
-                #(reward for finding food=100*reward for staying alive 1 frame)
-                severus.fitness += 0.05
+                severus.fitness += reward_move
                 
                 #Output the snake vision to the neural net
                 snake_output,obstructions = snakeVision(severus,food)
                 
-                #Ask neural net what snake should do based on snake's vision
-                nn_output = nets[index].activate(tuple(snake_output))
                 
+                snake_output=np.reshape(np.array(snake_output),(1,-1))
+                
+                #Ask neural net what snake should do based on snake's vision
+                nn_output = nets[index].predict(snake_output)
+                                
                 #Perform action suggested by nn_output
                 snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
                 
@@ -800,7 +804,7 @@ def evalGenomes(population, generations, initial_config=False):
                     severus.energy+=food_energy
                     
                     #Increase the snakes fitness for finding food
-                    severus.fitness +=1
+                    severus.fitness += reward_food
                     
                     #Pygame snakes cannot store more than 999 kilocalories, excess is not metabolized
                     if severus.energy>999:
@@ -811,6 +815,7 @@ def evalGenomes(population, generations, initial_config=False):
                     x,y=severus.components[0].position[0],severus.components[0].position[1]
                     if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows) or ((x,y) in severus.snake_space()[1:]):
                         #game over because of biting tail or out of bounds
+                        severus.fitness += reward_hit_wall
                         game_on=False
                         
                     #If the snake tries to go out of bounds reset the head to the tail
@@ -833,21 +838,135 @@ def evalGenomes(population, generations, initial_config=False):
         
                     header.score=severus.length()
                     
+                    #record how fit the snake was
+                    print(severus.fitness)
+                    fitness[index]=severus.fitness    
+                    
                     #run=False: kill game | game_on=True: reset snake
                     #run=False
                     game_on=True
                     
-                    #Break from while loop and with the next snake
+                    #Break from while loop and continue with the next snake
                     break
     
     
                 #REDRAW GAME WINDOW
                 redrawGameWindow()
+        
+        print(fitness)
+        
+        # =============================================================================
+        # SELECT THE MOST FIT PARENTS TO SURVIVE AND BREED
+        # =============================================================================
+        #Agent[0]=(net[0],fitness[0])
+        agents=selection(nets,fitness,survival_fraction=0.2)
+        
+        # =============================================================================
+        # PERFORM CROSSOVER TO MAKE CHILD NEURAL NETS FROM TOP PERFORMING PARENTS
+        # =============================================================================
+        nets=[agent[0] for agent in agents]
+        nets.extend(crossover(agents,nn_shape,activation_functions))
+        
+        # =============================================================================
+        # SAVE THE BEST FIT PARENT TO MONITOR HOW THE POPULATION GREW FROM GENERATION TO GENERATION
+        # =============================================================================
+        
+        #Save a copy of the best neural network from each generation
+        nets[0].save_weights('./ga_snake_history/best/'+str(gen)+'_best')
+        
+        #Save the ost recent copy of the history dictionary
+        pickle.dump(history,open('./ga_snake_history/history.pkl','wb'))
+        
+        #Save the most recent copy of the top 50 snakes
+        save_count=0
+        for net in nets:
+            net.save_weights('./ga_snake_history/checkpoint_weights/'+str(save_count)+'_weights')
+            save_count+=1
+            if save_count==50:
+                break
             
+
+        # =============================================================================
+        # IF A GENOME (NEURAL NET) WAS GOOD ENOUGH TO MEET THE FINAL REQUIREMENT THEN BREAK      
+        # =============================================================================
+        history['best'].append(np.max(fitness))
+        history['average'].append(np.mean(fitness))
+        history['std'].append(np.std(fitness))
+        history['run_time'].append(time.time()-t_start)
+        
+        reporter(history)
+        
+        # =============================================================================
+        # IF A SATISFACTORY SNAKE EXISTS, BREAK (i.e. snake can reach a score of 200)
+        # =============================================================================
+        if max(fitness)>fitness_threshold:
+            print('A super snake has been born.')
+            break
+        
+        # =============================================================================
+        # ADD RANDOM MUTATIONS
+        # =============================================================================
+        nets=mutate(nets)
+        
+        #reset snake population and fitness values for next round
+        snakes = []
+        fitness = [0]*population
+        
+        for i in range(population):
+            snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
+
+def scale(arr,minimum=-2,maximum=2):
+    ''' Scale a np.random.rand array to range from minimum to maximum'''
+    return (arr-0.5)*(maximum-minimum)
+
+def reporter(history,plot=True):
+    '''Prints statistics about the most recent population to monitor growth'''
+    print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+    print('~~~~~~~~~~~~GENERATION: '+str(len(history['best'])+1)+'~~~~~~~~~~~~~~~~~~')
+    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+
+    print('Best:',str(round(history['best'][-1],2)))
+    print('Average:',str(round(history['average'][-1],2)))
+    print('Standard Deviation:',str(round(history['std'][-1],2)))
+    print('Run Time:',str(round(history['run_time'][-1],2)))
+    
+    if plot:
+        generations=np.linspace(1,len(history['best']),len(history['best']))
+        best=history['best']
+        average=history['average']
+        std=history['std']
+        
+        average_std_over=[a+s for (a,s) in zip(average,std)]
+        average_std_under=[a-s for (a,s) in zip(average,std)]
+        
+        plt.plot(generations,best,'r-',label='Best',lw=2)
+        plt.plot(generations,average,'b-',label='Average',lw=2)
+        plt.plot(generations,average_std_over,'g--',label='+1 STD')
+        plt.plot(generations,average_std_under,'g--',label='-1 STD')
+
             
-        #pygame.quit()
+def mutate(nets, mutation_range=[-2,2], mutation_rate=0.03, nn_shape=[20,12,8,4], activation_functions=['tanh','tanh','tanh','softmax']):
+    mutated_nets=[]
     
+    for net in nets:
+        #Flatten neural network to 1D list
+        net = flatten_net(net)
+        
+        #use a list of booleans to denote whether a gene will be mutated
+        mutate = np.random.rand(len(net)) <= mutation_rate
+        for index,result in enumerate(mutate):
+            if result:
+                net[index]=scale(np.random.rand(),minimum=mutation_range[0],maximum=mutation_range[1])
+        
+        #Rebuild the neural_network model from the flattened child net
+        connection_weights,bias_weights = rebuild_net(net,nn_shape)
+        mutated_net = make_nets(connection_weights,bias_weights,activation_functions)
+        
+        mutated_nets.append(mutated_net)
     
+    return mutated_nets
+
+
 def make_nets(connection_weights,bias_weights,activation_functions):
     ''' Each layer after the initial input layer of a densly connected FFNN 
     will have connection weights in the form of numpy array with the shape of 
@@ -885,48 +1004,152 @@ def make_nets(connection_weights,bias_weights,activation_functions):
     for (c,b,a) in zip(connections,biases,activations):
         model.add(keras.layers.Dense(c.shape[1],weights=[c,b],activation=a))
     
-
     return model
 
+def selection(nets,fitness, survival_fraction=0.2):
+    '''Returns a zipped list of the top {survival_fraction} percent of neural
+    networks based on their fitness'''
+    
+    agents=zip(nets,fitness)
+    agents=sorted(agents, key=lambda agent: agent[1], reverse=True)
+    
+    #Return the top 20% of most fit agents to move on and breed    
+    return agents[:int(survival_fraction*len(agents))]
 
-def run(population,generations,initial_config=False):
-    '''
-    The genetic algorithm run function:
-        
-        creates a population of random agents
-        
-        checks each agent in the population ot see how well it fits the desired goal
-        
-        Picks the best agents to be parents and breed
-        
-        Creates new agents using cross over
-        
-        Adds in a few (3%) mutations to add variance that may not be large enough in the initial population
-    '''
-    global generations, in_img_size, in_img, population
+def crossover(agents,nn_shape,activation_functions):
+    child_nets=[]
     
-    #each agent is a random string
-    agents = init_agents(population, in_img_size)
-    
-    for generation in range(generations):
-        print('Generation: '+str(generation)+' Fit: '+str(agents[0].fitness))
+    for i in range(int(population-len(agents))):
+        #create one child each loop, until len(nets)+len(child_nets)=population
         
+        #Randomly select two parents
+        agent_index_1 = np.random.randint(len(agents))
+        agent_index_2 = np.random.randint(len(agents))
         
-        agents=fitness(agents)
-        agents=selection(agents)
+        #Make sure the parents are not identical
+        while agent_index_1 == agent_index_2:
+            agent_index_2 = np.random.randint(len(agents))
         
-        agents=crossover(agents)
-        agents=mutation(agents,mutation_rate)
+        #Flatten parents neural_net weights (both connection and bias weights) to a 1D list for crossover
+        parent_1 = flatten_net(agents[agent_index_1][0])
+        parent_2 = flatten_net(agents[agent_index_2][0])
         
-        if any(agent.fitness==1.0 for agent in agents):
-            print('Threshold met!')
-            break
-    
+        #Fitness of each parent
+        fitness_1 = agents[agent_index_1][1]
+        fitness_2 = agents[agent_index_2][1]
+        
+        #Randomly select which parent the child gets its gene on while giving
+        #a higher probability to the more fit parents genes
+        try:
+            probability_threshold = fitness_1 / (fitness_2 + fitness_1)
+        except:
+            #in the case that fitness_1+fitness_2=0
+            probability_threshold = 0.5
+        
+        #If p1_genes is true, the child gets that gene from parent 1
+        p1_genes = np.random.rand(len(parent_1)) <= probability_threshold
+        
+        child=np.array([0]*len(parent_1))
+        child_gene_index=0
+        for p1,p2,p1_gene in zip(parent_1,parent_2,p1_genes):
+            if p1_gene:
+                child[child_gene_index]=p1
+            else:
+                child[child_gene_index]=p2
+            child_gene_index+=1
+            
+        
+        #Rebuild the neural_network model from the flattened child net
+        connection_weights, bias_weights = rebuild_net(child, nn_shape)
+        child_net = make_nets(connection_weights, bias_weights, activation_functions)
+        
+        child_nets.append(child_net)
+        
+    return child_nets
 
+def flatten_net(net):
+    #Extract Numpy arrays of connection and bias weights from model
+    layers=[layer.numpy() for layer in net.weights]
+    
+    #Convert each array to 1 dimension along the x-axis
+    flat_layers=[np.reshape(layer,(-1,1)) for layer in layers]
+    
+    #Collect all connection andn bias weights into a list
+    flattened_net=[]
+    for layer in flat_layers:
+        flattened_net.extend(layer)
+        
+    #convert all values to floats
+    flattened_net=[float(weight) for weight in flattened_net]
+        
+    return flattened_net
+
+def rebuild_net(flattened_net,nn_shape):
+    '''
+    Takes a list of the connection and bias weights in 1D form:
+        List of all node connection weights for hidden layer 1
+        List of all bias weights for hidden layer 1
+        List of all node connedction weights for hidden layer 2
+        ...
+        List of all node connection weights for output layer
+        List of all bias weights for output layer
+    
+    Restructures the flattened_net into arrays where each node layer
+    has a 1D bias array and each connection layer has a 2D connection weight array
+    
+    the shape of each bias array is (number_of_nodes_in_layer,1)
+    the shape of each connection weight array is (number_of_nodes_in_previous_layer,number_of_nodes_in_current_layer)
+    
+    
+    i.e.: for a model with 3 input, 1 hidden layer of 2 nodes, and 1 output:
+        
+        connection_weights layer 1: 0.5, 0.7, -0.3, 0.4, 0.8, -0.6
+        bias_weights layer 1: 0, 0
+        connection_weights output layers: 0.8, -0.4
+        bias_weights output layer: 0
+        
+        
+    In : rebuild_net([0.5,0.7,-0.3,0.4,0.8,-0.6,0,0,0.8,-0.4,0])
+    
+    Out: ( list of connection weight numpy arrays, list of bias weight numpy arrays )
+         ( [[[0.5,0.7,-0.3],[0.4,0.8,-0.6]], [0.8,-0.4]], [[0,0], [0]] )
+    '''
+    
+    connection_weights=[]
+    bias_weights=[]
+    
+    start_idx=0
+    for idx in range(1,len(nn_shape)):
+        #Add a reshaped layer to the connection_weights list
+        end_idx=int(start_idx+nn_shape[idx-1]*nn_shape[idx])
+        connection_weights.append(np.reshape(flattened_net[start_idx:end_idx],(nn_shape[idx-1], nn_shape[idx])))
+        start_idx=end_idx
+        
+        #Add reshaped bias weights
+        end_idx=int(start_idx+nn_shape[idx])
+        bias_weights.append(np.reshape(flattened_net[start_idx:end_idx],(nn_shape[idx],)))
+        start_idx=end_idx
+        
+    return (connection_weights,bias_weights)
 
 
 if __name__ == '__main__':
-    run(population,generations,initial_config=False)
+    population=20
+    generations=10
+    fitness_threshold=200
+    
+    mutation_rate=0.03
+    mutation_range=[-2,2]
+    
+    nn_shape=[20,12,8,4]
+    activation_functions=['tanh','tanh','tanh','softmax']
+    
+    initial_config=False
+    
+    evalGenomes(population, generations, fitness_threshold=fitness_threshold, 
+                 mutation_rate=mutation_rate, mutation_range=mutation_range, 
+                 nn_shape=nn_shape, activation_functions=activation_functions, 
+                 initial_config=initial_config)
     
     pygame.quit()
     

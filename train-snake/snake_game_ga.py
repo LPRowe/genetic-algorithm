@@ -15,7 +15,9 @@ from tensorflow import keras
 import pickle
 import time
 import matplotlib.pyplot as plt
+import glob
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/'
 
 pygame.init()
@@ -453,7 +455,7 @@ def main():
     #Add food to the map in a location that the snake does not inhabit
     food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
     while food_loc in severus.snake_space():
-        food_loc=tuple(np.random.randint(1,grid_columns),np.random.randint(1,grid_rows))
+        food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
     food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape)
 
     
@@ -519,11 +521,11 @@ def main():
             if header.score>=header.high_score:
                 header.high_score=header.score
             
-            #generate new food at a location not on the snake
+            #randomly set new food location that is not on the snake
             food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
             while food_loc in severus.snake_space():
                 food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
-            food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)])
+            food.position=food_loc
             
             #Increase snakes energy after eating food
             severus.energy+=food_energy
@@ -571,7 +573,7 @@ def main():
     pygame.quit()
     
 
-def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.03, mutation_range=[-2,2], nn_shape=[20,12,8,4], activation_functions=['tanh','tanh','tanh','softmax'], initial_config=False):
+def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.03, mutation_range=[-2,2], nn_shape=[20,12,8,4], activation_functions=['tanh','tanh','tanh','softmax'], initial_config=False, watch=False):
     '''
     population: the number of snakes in each generation
     generations: the number of generations you wish to run the evolution process for
@@ -611,14 +613,16 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
     gen=0
     
     #SET INITIAL CONDITIONS
-    clock=pygame.time.Clock()
+    if watch:
+        clock=pygame.time.Clock()
     win_width=500
     win_height=win_width+50
-    win=pygame.display.set_mode((win_width,win_height))
+    if watch:
+        win=pygame.display.set_mode((win_width,win_height))
     
     
     #Size of grid for snake to move on
-    grid_columns,grid_rows=30,30
+    grid_columns,grid_rows=15,15
     
     
     #Range of colors to randomly choose from for snake food
@@ -667,7 +671,7 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
     #Add food to the map in a location that the snake does not inhabit
     food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
     while food_loc in severus.snake_space():
-        food_loc=tuple(np.random.randint(1,grid_columns),np.random.randint(1,grid_rows))
+        food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
     food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape)
 
     
@@ -701,25 +705,64 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
             #create neural net with given weights and activation functions
             nets.append(make_nets(conn_weights,bias_weights,activation_functions))
     else:
+        #build population of snakes
         for i in range(population):
             snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
-        nets,history=pickle.load(initial_config)
+        
+        #load top 50 nerual nets from previous session
+        net_files=glob.glob('ga_snake_history/checkpoint_weights/*.h5')
+        net_files=[i.split('\\')[-1] for i in net_files]
+        
+        nets=[]
+        #Manually compile the top 50 neural nets from previous session
+        for file in net_files:
+            print()
+            print('Manually loading, flattening, and rebuilding neural net',file,'from checkpoint.')
+            net=keras.models.load_model('./ga_snake_history/checkpoint_weights/'+file)
+            flattened_net=flatten_net(net)
+            connection_weights,bias_weights=rebuild_net(flattened_net,nn_shape)
+            nets.append(make_nets(connection_weights,bias_weights,activation_functions))
+        
+        #Reload the latest history
+        with open('./ga_snake_history/history.pkl', 'rb') as file:
+            history = pickle.load(file)
+            
+        #if the population is larger than 50, expand on the loaded neural nets to fill the population
+        for i in range(population-len(nets)):
+            nets.append(np.random.choice(nets))
+        
+        #mutate the nets to add diversity
+        nets=mutate(nets)
+        
+        print('nets')
+        print(len(nets))
+
 
             
     #Decide how much the snake should be rewarded for each positive/negative action
     reward_food = 2
     reward_move = 0.01
-    reward_hit_wall = - 0.0
+    reward_hit_wall = - 1
     
     for gen in range(generations):
         t_start=time.time()
         gen+=1
 
         #run loop
+        snake_count=0
         for index,severus in enumerate(snakes):
-            run=True
+            
+            #Progress bar
+            if snake_count%25==0:
+                empty=' '*50
+                full='|'*50
+                progress=float(snake_count)/float(population)
+                print('|'+full[:int(progress*50)]+empty[:int((1-progress)*50)]+'|')
+            snake_count+=1
+
+            run=True                
             while run:
-                
+            
                 #Set the speed the game runs at playing: (50,20) | training (0,comment out)
                 #pygame.time.delay(0)
                 #clock.tick(100)
@@ -819,8 +862,8 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
                         game_on=False
                         
                     #If the snake tries to go out of bounds reset the head to the tail
-                    if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows):
-                        severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
+                    #if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows):
+                    #    severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
                 
                 
                 #The snake starved before finding food
@@ -834,14 +877,22 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
                     if header.high_score<=severus.length():
                         header.high_score=severus.length()
                     
-                    severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
-        
-                    header.score=severus.length()
-                    
                     #record how fit the snake was
-                    print(severus.fitness)
-                    fitness[index]=severus.fitness    
+                    fitness[index]=severus.fitness  
                     
+                    #reset snake
+                    severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
+                    
+                    #reset food
+                    food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
+                    while food_loc in severus.snake_space():
+                        food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
+                    food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape)
+
+                    
+                    #update score
+                    header.score=severus.length()
+                
                     #run=False: kill game | game_on=True: reset snake
                     #run=False
                     game_on=True
@@ -851,10 +902,9 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
     
     
                 #REDRAW GAME WINDOW
-                redrawGameWindow()
-        
-        print(fitness)
-        
+                if watch:
+                    redrawGameWindow()
+                
         # =============================================================================
         # SELECT THE MOST FIT PARENTS TO SURVIVE AND BREED
         # =============================================================================
@@ -872,15 +922,19 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
         # =============================================================================
         
         #Save a copy of the best neural network from each generation
-        nets[0].save_weights('./ga_snake_history/best/'+str(gen)+'_best')
+        #nets[0].save_weights('./ga_snake_history/best/'+str(gen)+'_best')
+        nets[0].save('./ga_snake_history/best/'+str(gen)+'_best.h5')
         
         #Save the ost recent copy of the history dictionary
-        pickle.dump(history,open('./ga_snake_history/history.pkl','wb'))
+        with open('./ga_snake_history/history.pkl','wb') as file:
+            pickle.dump(history, file, protocol=pickle.HIGHEST_PROTOCOL)
+
         
         #Save the most recent copy of the top 50 snakes
         save_count=0
         for net in nets:
-            net.save_weights('./ga_snake_history/checkpoint_weights/'+str(save_count)+'_weights')
+            #net.save_weights('./ga_snake_history/checkpoint_weights/'+str(save_count)+'_weights')
+            net.save('./ga_snake_history/checkpoint_weights/'+str(save_count)+'_weights.h5')
             save_count+=1
             if save_count==50:
                 break
@@ -919,10 +973,10 @@ def scale(arr,minimum=-2,maximum=2):
     ''' Scale a np.random.rand array to range from minimum to maximum'''
     return (arr-0.5)*(maximum-minimum)
 
-def reporter(history,plot=True):
+def reporter(history, plot=True, savefile='./ga_snake_history/'):
     '''Prints statistics about the most recent population to monitor growth'''
     print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-    print('~~~~~~~~~~~~GENERATION: '+str(len(history['best'])+1)+'~~~~~~~~~~~~~~~~~~')
+    print('~~~~~~~~~~~~~~GENERATION: '+str(len(history['best'])+1)+'~~~~~~~~~~~~~~~~~~')
     print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
     print('Best:',str(round(history['best'][-1],2)))
@@ -943,6 +997,7 @@ def reporter(history,plot=True):
         plt.plot(generations,average,'b-',label='Average',lw=2)
         plt.plot(generations,average_std_over,'g--',label='+1 STD')
         plt.plot(generations,average_std_under,'g--',label='-1 STD')
+        plt.savefig(savefile+'progress_plot.png')
 
             
 def mutate(nets, mutation_range=[-2,2], mutation_rate=0.03, nn_shape=[20,12,8,4], activation_functions=['tanh','tanh','tanh','softmax']):
@@ -954,9 +1009,9 @@ def mutate(nets, mutation_range=[-2,2], mutation_rate=0.03, nn_shape=[20,12,8,4]
         
         #use a list of booleans to denote whether a gene will be mutated
         mutate = np.random.rand(len(net)) <= mutation_rate
-        for index,result in enumerate(mutate):
+        for idx,result in enumerate(mutate):
             if result:
-                net[index]=scale(np.random.rand(),minimum=mutation_range[0],maximum=mutation_range[1])
+                net[idx]=scale(np.random.rand(),minimum=mutation_range[0],maximum=mutation_range[1])
         
         #Rebuild the neural_network model from the flattened child net
         connection_weights,bias_weights = rebuild_net(net,nn_shape)
@@ -1134,7 +1189,7 @@ def rebuild_net(flattened_net,nn_shape):
 
 
 if __name__ == '__main__':
-    population=20
+    population=500
     generations=10
     fitness_threshold=200
     
@@ -1144,12 +1199,16 @@ if __name__ == '__main__':
     nn_shape=[20,12,8,4]
     activation_functions=['tanh','tanh','tanh','softmax']
     
-    initial_config=False
+    #Set initial config if continuing from partially trained neural nets
+    initial_config=True
+    
+    #set watch to True if you want to watch each generation of snake
+    watch=False
     
     evalGenomes(population, generations, fitness_threshold=fitness_threshold, 
                  mutation_rate=mutation_rate, mutation_range=mutation_range, 
                  nn_shape=nn_shape, activation_functions=activation_functions, 
-                 initial_config=initial_config)
+                 initial_config=initial_config, watch=watch)
     
     pygame.quit()
     

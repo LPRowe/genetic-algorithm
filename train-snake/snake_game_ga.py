@@ -921,10 +921,6 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
         # SAVE THE BEST FIT PARENT TO MONITOR HOW THE POPULATION GREW FROM GENERATION TO GENERATION
         # =============================================================================
         
-        #Save a copy of the best neural network from each generation
-        #nets[0].save_weights('./ga_snake_history/best/'+str(gen)+'_best')
-        nets[0].save('./ga_snake_history/best/'+str(gen)+'_best.h5')
-        
         #Save the ost recent copy of the history dictionary
         with open('./ga_snake_history/history.pkl','wb') as file:
             pickle.dump(history, file, protocol=pickle.HIGHEST_PROTOCOL)
@@ -949,6 +945,11 @@ def evalGenomes(population, generations, fitness_threshold=200, mutation_rate=0.
         history['run_time'].append(time.time()-t_start)
         
         reporter(history)
+        
+        
+        #Save a copy of the best neural network from each generation
+        #nets[0].save_weights('./ga_snake_history/best/'+str(gen)+'_best')
+        nets[0].save('./ga_snake_history/best/'+str(len(history['best'])+1)+'_best.h5')
         
         # =============================================================================
         # IF A SATISFACTORY SNAKE EXISTS, BREAK (i.e. snake can reach a score of 200)
@@ -1190,10 +1191,10 @@ def rebuild_net(flattened_net,nn_shape):
 
 if __name__ == '__main__':
     population=500
-    generations=10
+    generations=20
     fitness_threshold=200
     
-    mutation_rate=0.03
+    mutation_rate=0.1
     mutation_range=[-2,2]
     
     nn_shape=[20,12,8,4]

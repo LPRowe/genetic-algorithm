@@ -7,12 +7,9 @@ Created on Tue Mar 17 16:15:13 2020
 
 settings = {
         #(columns,rows) in the grid 
-        'grid_size' : (10,10),
+        'grid_size' : (30,30),
         
         'food_energy' : 100,
-        
-        #how many generations to run for
-        'generations' : 20,
         
         #nn_shape[0] is number of nodes in input layer, nn_shape[-1] is number of nodes in output layer
         #All hidden layers have nn_shape[1], nn_shape[2], ... nodes
@@ -22,8 +19,22 @@ settings = {
         'activation_functions' : ['relu','relu','sigmoid'],
         
         #Location of the best performing neural nets from each generation
-        'best_snakes_file' : './ga_snake_history/best'
+        'best_snakes_file' : './ga_snake_history/best',
         
         #set watch to True if you want the screen to display the game as the snakes are trained
-        'watch' : True
+        'watch' : True,
+        
+        #auto-play=True : when a snake dies, the next generation snake will start to play
+        #auto-play=False: key input will be used to change generations
+        'autoplay' : False,
+        
+        #Set the speed of the game with clock speed
+        'clock_speed' : 15,
+        
+        #If colorful then snake will be rainbow colored, otherwise the snake and food will be green
+        'colorful' : False,
+        
+        #Choose how many generations back to see 10 will show only the top 10 snakes
+        #If play_top_n_gen = 0 all generations will be loaded
+        'play_top_n_gen' : 10
             }

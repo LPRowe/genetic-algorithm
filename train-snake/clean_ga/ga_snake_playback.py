@@ -261,7 +261,7 @@ def redrawGameWindow():
 # INITIAL CONDITIONS FOLLOWED BY RUN LOOP
 # =============================================================================
 
-def evalGenomes(best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_shape=[18,14,8,4], activation_functions=['relu','relu','sigmoid'], watch=True):
+def runBestSnakes(play_top_n_gen=10, colorful=True, clock_speed=15, autoplay=True, best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_shape=[18,14,8,4], activation_functions=['relu','relu','sigmoid'], watch=True):
 
     # =============================================================================
     # MAIN LOOP
@@ -302,7 +302,7 @@ def evalGenomes(best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_sh
             'indigo':(75,0,130),
             'violet':(148,0,211)}
     
-    colorful=True
+    #colorful=True
     if colorful:
         colors=['red','orange','yellow','green','blue','indigo','violet']
     else:
@@ -353,9 +353,9 @@ def evalGenomes(best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_sh
     # =============================================================================
         
     #load best neural net for each generation
-    net_files=glob.glob(best_snakes_file)
+    net_files=glob.glob(best_snakes_file+'//*')
     net_files=[i.split('\\')[-1] for i in net_files]
-    
+        
     #Order files by generation
     net_files=sorted(net_files,key=lambda name: int(name.split('_')[0]))
     
@@ -364,9 +364,9 @@ def evalGenomes(best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_sh
         snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
     
     #Manually compile the top 50 neural nets from previous session
-    for file in net_files:
+    for file in net_files[-play_top_n_gen:]:
         print()
-        net=keras.models.load_model('./ga_snake_history/checkpoint_weights/'+file)
+        net=keras.models.load_model(best_snakes_file+'//'+file)
         flattened_net=flatten_net(net)
         connection_weights,bias_weights=rebuild_net(flattened_net,nn_shape)
         nets.append(make_nets(connection_weights,bias_weights,activation_functions))
@@ -380,164 +380,177 @@ def evalGenomes(best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_sh
 
 
     #run loop
-    for gen,severus in enumerate(snakes):
-
-        run=True
-        while run:
+    gen=0
+    severus=snakes[gen]
+    run=True
+    while run:
+        #Set the speed the game runs at playing: (50,20) | training (0,comment out)
+        if watch:
+            pygame.time.delay(50)
+            clock.tick(clock_speed)
         
-            #Set the speed the game runs at playing: (50,20) | training (0,comment out)
-            if watch:
-                pygame.time.delay(50)
-                clock.tick(15)
+        #Every time step, severus loses one energy [kcal]
+        severus.energy-=1
+        
+        #get list of all events that happen i.e. keyboard, mouse, ...
+        for event in pygame.event.get():
+            #Check if the red X was clicked
+            if event.type==pygame.QUIT:
+                run=False
+        
+        #keep track of where the snakes tail is before movement incase it eats food
+        severus.tail=severus.components[-1]
+        
+        
+        # =============================================================================
+        # CONTROL SNAKE USING NEURAL NET      
+        # =============================================================================
+        #Output the snake vision to the neural net
+        snake_output,obstructions = snakeVision(severus,food)
+        
+        snake_output=np.reshape(np.array(snake_output),(1,-1))
+        
+        #Ask neural net what snake should do based on snake's vision
+        nn_output = nets[gen].predict(snake_output)
+                        
+        #Perform action suggested by nn_output
+        snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
+        
+        #OUTPUT FROM NEURAL NET (NN_OUTPUT) DRIVES THE SNAKE
+        if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)) or severus.direction==(-1,0):
+            #Only allow a left turn if the snake is not going right
             
-            #Every time step, severus loses one energy [kcal]
-            severus.energy-=1
-            
-            #get list of all events that happen i.e. keyboard, mouse, ...
-            for event in pygame.event.get():
-                #Check if the red X was clicked
-                if event.type==pygame.QUIT:
-                    run=False
-            
-            #keep track of where the snakes tail is before movement incase it eats food
-            severus.tail=severus.components[-1]
+            #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
+            severus.components[-1].position=(severus.components[0].position[0]-1,severus.components[0].position[1])
+            #Move the tail component to the head position of the snake
+            severus.components=[severus.components.pop()]+severus.components
+            #Change the direction of the snake to left
+            severus.direction=(-1,0)
             
             
-            # =============================================================================
-            # CONTROL SNAKE USING NEURAL NET      
-            # =============================================================================
-            #Increase the snakes fitness for each frame it has lived 
-            severus.fitness += reward_move
+        if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)) or severus.direction==(1,0):
+            severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
+            severus.components=[severus.components.pop()]+severus.components
+            severus.direction=(1,0)
             
-            #Output the snake vision to the neural net
-            snake_output,obstructions = snakeVision(severus,food)
+        if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)) or severus.direction==(0,-1):
+            severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
+            severus.components=[severus.components.pop()]+severus.components
+            severus.direction=(0,-1)
             
+        if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)) or severus.direction==(0,1):
+            severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
+            severus.components=[severus.components.pop()]+severus.components
+            severus.direction=(0,1)
+
             
-            snake_output=np.reshape(np.array(snake_output),(1,-1))
+        #If the snake finds food it will grow by lenght 1
+        if severus.components[0].position==food.position:
+            #elongate snake with color of food
+            severus.components.append(SnakeComponent(grid.square_width,severus.tail.position,food.color,shape=food.shape))
             
-            #Ask neural net what snake should do based on snake's vision
-            nn_output = nets[index].predict(snake_output)
-                            
-            #Perform action suggested by nn_output
-            snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
+            #update the score
+            header.score=severus.length()
             
-            #OUTPUT FROM NEURAL NET (NN_OUTPUT) DRIVES THE SNAKE
-            if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)) or severus.direction==(-1,0):
-                #Only allow a left turn if the snake is not going right
-                
-                #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
-                severus.components[-1].position=(severus.components[0].position[0]-1,severus.components[0].position[1])
-                #Move the tail component to the head position of the snake
-                severus.components=[severus.components.pop()]+severus.components
-                #Change the direction of the snake to left
-                severus.direction=(-1,0)
-                
-                
-            if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)) or severus.direction==(1,0):
-                severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
-                severus.components=[severus.components.pop()]+severus.components
-                severus.direction=(1,0)
-                
-            if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)) or severus.direction==(0,-1):
-                severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
-                severus.components=[severus.components.pop()]+severus.components
-                severus.direction=(0,-1)
-                
-            if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)) or severus.direction==(0,1):
-                severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
-                severus.components=[severus.components.pop()]+severus.components
-                severus.direction=(0,1)
-    
-                
-            #If the snake finds food it will grow by lenght 1
-            if severus.components[0].position==food.position:
-                #elongate snake with color of food
-                severus.components.append(SnakeComponent(grid.square_width,severus.tail.position,food.color,shape=food.shape))
-                
-                #update the score
-                header.score=severus.length()
-                
-                if header.score>=header.high_score:
-                    header.high_score=header.score
-                
-                #generate new food at a location not on the snake
+            if header.score>=header.high_score:
+                header.high_score=header.score
+            
+            #generate new food at a location not on the snake
+            food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
+            while food_loc in severus.snake_space():
                 food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
-                while food_loc in severus.snake_space():
-                    food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
-                food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],grid=grid)
-                
-                #Increase snakes energy after eating food
-                severus.energy+=food_energy
-                
-                #Increase the snakes fitness for finding food
-                severus.fitness += reward_food
-                
-                #Pygame snakes cannot store more than 999 kilocalories, excess is not metabolized
-                if severus.energy>999:
-                    severus.energy=999         
-            else:
-                #If the snake bites its tail or wanders into the hunting zone the snake becomes injured
-                #note if snake does not move off of food in one frame it will register as biting its own tail
-                x,y=severus.components[0].position[0],severus.components[0].position[1]
-                if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows) or ((x,y) in severus.snake_space()[1:]):
-                    #game over because of biting tail or out of bounds
-                    severus.fitness += reward_hit_wall
-                    game_on=False
-                    
-                #If the snake tries to go out of bounds reset the head to the tail
-                #if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows):
-                #    severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
+            food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],grid=grid)
             
+            #Increase snakes energy after eating food
+            severus.energy+=food_energy
             
-            #The snake starved before finding food
-            if severus.energy<=0:
+            #Pygame snakes cannot store more than 999 kilocalories, excess is not metabolized
+            if severus.energy>999:
+                severus.energy=999         
+        else:
+            #If the snake bites its tail or wanders into the hunting zone the snake becomes injured
+            #note if snake does not move off of food in one frame it will register as biting its own tail
+            x,y=severus.components[0].position[0],severus.components[0].position[1]
+            if (x<0 or x>=grid_columns) or (y<1 or y>grid_rows) or ((x,y) in severus.snake_space()[1:]):
+                #game over because of biting tail or out of bounds
                 game_on=False
-                
-                
-            #If snake died of starvation, bit its tail or hit a wall
-            if not game_on:
-                #print('snake injured at ('+str(x)+','+str(y)+')')
-                if header.high_score<=severus.length():
-                    header.high_score=severus.length()
-                
-                #record how fit the snake was
-                fitness[index]=severus.fitness  
-                
-                #reset snake
-                severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
-                
-                #reset food
-                food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
-                while food_loc in severus.snake_space():
-                    food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
-                food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape,grid=grid)
-
-                
-                #update score
-                header.score=severus.length()
+        
+        #The snake starved before finding food
+        if severus.energy<=0:
+            game_on=False
             
-                #run=False: kill game | game_on=True: reset snake
-                #run=False
-                game_on=True
-                
-                #Break from while loop and continue with the next snake
-                break
+            
+        #If snake died of starvation, bit its tail or hit a wall
+        if not game_on:
+            #print('snake injured at ('+str(x)+','+str(y)+')')
+            if header.high_score<=severus.length():
+                header.high_score=severus.length()
+            
+            #reset snake
+            severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
+            severus.energy=food_energy
+            
+            #reset food
+            food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
+            while food_loc in severus.snake_space():
+                food_loc=tuple((np.random.randint(1,grid_columns),np.random.randint(1,grid_rows)))
+            food=SnakeFood(int(grid.square_width),food_loc,color_dict[np.random.choice(colors)],shape=severus.components[0].shape,grid=grid)
 
-
-            #REDRAW GAME WINDOW
-            if watch:
-                redrawGameWindow()
+            
+            #update score
+            header.score=severus.length()
+        
+            #run=False: kill game | game_on=True: reset snake
+            #run=False
+            #game_on=True
+            
+            #Break from while loop and continue with the next snake
+            #break
+            
+            
+        # =============================================================================
+        # INCREASE OR DECREASE GENERATION WITH INPUT KEYS      
+        # =============================================================================
+        if autoplay and not game_on:
+            #When snake dies, start with snake from next generation
+            gen+=1
+            gen=gen % len(nets) #If on the last generation loop back to the first generation
+            severus=Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy)
+        else:
+            #Use key input to change generations
+            keys=pygame.key.get_pressed()
+            
+            if keys[pygame.K_RIGHT]:
+                gen+=1
+                gen=gen % len(nets) #If on the last generation loop back to the first generation
+                severus=snakes[gen]
+            elif keys[pygame.K_LEFT]:
+                gen-=1
+                gen=gen % len(nets) #If on the last generation loop back to the first generation
+                severus=snakes[gen]
+            elif keys[pygame.K_UP]:
+                clock_speed+=1
+            elif keys[pygame.K_DOWN]:
+                clock_speed-=1
+        
+        game_on=True
+        
+        #REDRAW GAME WINDOW
+        title='Best Snakes Generation '+str(gen+1)
+        pygame.display.set_caption(title)
+        if watch:
+            redrawGameWindow()
 
 
 if __name__ == '__main__':
     from ga_tools import *
     from game_objects import *
-    import settings
+    import settings_playback
     settings=settings_playback.settings
     
     print(settings)
     
-    evalGenomes(**settings)
+    runBestSnakes(**settings)
     
     pygame.quit()
     

@@ -325,10 +325,6 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
         colors=['green']
     
     
-    #Energy that each food contains
-    #food_energy=300
-    
-    
     #flag for whether the snake is alive
     game_on=True
 
@@ -380,10 +376,9 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
             snakes.append(Snake((1,0),SnakeComponent(int(grid.square_width),(int(0.5*grid_columns),int(0.5*grid_rows)),(0,255,0),shape='circle'),food_energy))
             
             #weights for connections between nodes
-            #conn_weights=[scale(np.random.rand(20,12)),scale(np.random.rand(12,8)),scale(np.random.rand(8,4))]
             conn_weights=[scale(np.random.rand(nn_shape[idx],nn_shape[idx+1])) for idx in range(len(nn_shape)-1)]
+            
             #bias for each node
-            #bias_weights=[scale(np.random.rand(12,)), scale(np.random.rand(8,)), scale(np.random.rand(4,))]
             bias_weights=[scale(np.random.rand(nn_shape[idx+1],)) for idx in range(len(nn_shape)-1)]
             
             #create neural net with given weights and activation functions
@@ -415,12 +410,7 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
             
         #if the population is larger than 50, expand on the loaded neural nets to fill the population
         for i in range(population-len(nets)):
-            nets.append(np.random.choice(nets))
-        
-        #print('Mutating loaded nets...')
-        #mutate the child nets to add diversity
-        #child_nets=mutate(nets[int(len(nets)*survival_fraction):], mutation_type=mutation_type, mutation_range=mutation_range, mutation_rate=mutation_rate, nn_shape=nn_shape, activation_functions=activation_functions)
-        #nets=nets[:int(len(nets)*survival_fraction)]+child_nets        
+            nets.append(np.random.choice(nets))   
         
         print('nets')
         print(len(nets))
@@ -611,9 +601,7 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
         # =============================================================================
         print('Performing crossover...')
         nets=[agent[0] for agent in agents]
-        
-        print('Nets:',str(len(nets)))
-        
+                
         nets.extend(crossover(agents, nn_shape, activation_functions,population))
         
         print('Nets:',str(len(nets)))
@@ -628,6 +616,7 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
         history['run_time'].append(time.time()-t_start)
         
         reporter(history)
+        print()
         
         
         print('Recording history...')
@@ -647,12 +636,10 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
         # =============================================================================
         # ADD RANDOM MUTATIONS
         # =============================================================================
-        print('Adding mutations...')
+        print('Adding mutations...\n')
         #Only mutate children, leave parents alone
         child_nets=mutate(nets[int(len(nets)*survival_fraction):], mutation_type=mutation_type, mutation_range=mutation_range, mutation_rate=mutation_rate, nn_shape=nn_shape, activation_functions=activation_functions)
-        print('Child Nets:',str(len(child_nets)))
         nets=nets[:int(len(nets)*survival_fraction)]+child_nets
-        print('Nets:',str(len(nets)))
         
         # =============================================================================
         # SAVE THE NEWLY CREATED POPULATION OF SNAKE NEURAL NETS AS A CHECKPOINT

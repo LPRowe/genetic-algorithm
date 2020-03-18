@@ -256,12 +256,56 @@ def redrawGameWindow():
     drawObstructions(obstructions)
     
     pygame.display.update()
+    
+def nonlethalOptions(_snake, grid_rows, grid_columns):
+    '''Returns a list of booleans where True means if the snake moves in that
+    direction, it will not die ['Right', 'Up', 'Left', 'Down']
+    '''
+    
+    head_position=_snake.components[0].position
+    
+    #space currently inhabited by the snakes tail
+    snake_space=_snake.snake_space()[1:]
+    
+    options=[basicInstincts(head_position, snake_space, direction, grid_rows, grid_columns) for direction in ['RIGHT','UP','LEFT','DOWN']]
+    
+    return np.array(options)
 
+def basicInstincts(head_position, snake_space, direction, grid_rows, grid_columns):
+    '''Returns True if the neural net decision does not immediately kill
+    the snake, returns False if the snake will die from the neural nets decision
+    
+    Helper function for nonlethalOptions()'''
+
+    x,y=head_position
+    
+    if direction=='RIGHT':
+        #head would move right
+        x2,y2=x+1,y
+    elif direction=='UP':
+        #head would move up
+        x2,y2=x,y-1
+    elif direction=='LEFT':
+        #head would move left
+        x2,y2=x-1,y
+    else:
+        #head would move down
+        x2,y2=x,y+1
+    
+    if x2 <0 or x2 >= grid_columns:
+        return False
+    if y2 < 1 or y2 > grid_rows:
+        return False
+    if (x2,y2) in snake_space:
+        return False
+    
+    return True
+    
 # =============================================================================
 # INITIAL CONDITIONS FOLLOWED BY RUN LOOP
 # =============================================================================
 
-def runBestSnakes(play_top_n_gen=10, colorful=True, clock_speed=15, autoplay=True, best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_shape=[18,14,8,4], activation_functions=['relu','relu','sigmoid'], watch=True):
+def runBestSnakes(basic_instincts=True, play_top_n_gen=10, colorful=True, clock_speed=15, autoplay=True, best_snakes_file=None, food_energy=300, grid_size=(10,10), nn_shape=[18,14,8,4], activation_functions=['relu','relu','sigmoid'], watch=True):
 
     # =============================================================================
     # MAIN LOOP
@@ -412,12 +456,23 @@ def runBestSnakes(play_top_n_gen=10, colorful=True, clock_speed=15, autoplay=Tru
         
         #Ask neural net what snake should do based on snake's vision
         nn_output = nets[gen].predict(snake_output)
-                        
+        
+        #FILTER OUT OPTIONS FROM NN_OUTPUT THAT IMMEDIATELY LEADS TO DEATH
+        if basic_instincts:
+            options=nonlethalOptions(severus, grid_rows, grid_columns)
+            nn_output=np.reshape(nn_output,(1,4))
+            nn_output=nn_output*options
+            
+            if sum(options)<3:
+                print()
+                print(options)
+                print(nn_output)
+
         #Perform action suggested by nn_output
         snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
         
         #OUTPUT FROM NEURAL NET (NN_OUTPUT) DRIVES THE SNAKE
-        if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)) or severus.direction==(-1,0):
+        if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)):
             #Only allow a left turn if the snake is not going right
             
             #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
@@ -428,17 +483,17 @@ def runBestSnakes(play_top_n_gen=10, colorful=True, clock_speed=15, autoplay=Tru
             severus.direction=(-1,0)
             
             
-        if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)) or severus.direction==(1,0):
+        if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)):
             severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(1,0)
             
-        if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)) or severus.direction==(0,-1):
+        if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,-1)
             
-        if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)) or severus.direction==(0,1):
+        if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)):
             severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
             severus.components=[severus.components.pop()]+severus.components
             severus.direction=(0,1)

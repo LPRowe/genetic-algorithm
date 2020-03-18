@@ -36,5 +36,7 @@ settings = {
         
         #Choose how many generations back to see 10 will show only the top 10 snakes
         #If play_top_n_gen = 0 all generations will be loaded
-        'play_top_n_gen' : 10
+        'play_top_n_gen' : 10,
+        
+        'basic_instincts' : True
             }

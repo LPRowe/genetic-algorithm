@@ -23,7 +23,7 @@ settings = {
         'fitness_threshold' : 200,
         
         #Probability of a gene mutating
-        'mutation_rate' : 0.005,
+        'mutation_rate' : 0.0025,
         
         #mutation gaussian or uniform (other will assume uniform) gaussian adds np.random.normal() to mutated chromosomes
         'mutation_type' : 'gaussian',

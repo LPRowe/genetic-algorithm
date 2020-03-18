@@ -481,7 +481,7 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
                 snake_actions={0:'RIGHT',1:'UP',2:'LEFT',3:'DOWN',4:'NONE'}
                 
                 #OUTPUT FROM NEURAL NET (NN_OUTPUT) DRIVES THE SNAKE
-                if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)) or severus.direction==(-1,0):
+                if (snake_actions[np.argmax(nn_output)]=='LEFT' and severus.direction!=(1,0)):
                     #Only allow a left turn if the snake is not going right
                     
                     #Update the snakes tail components position to be to the left of the snakes head This will create the illusion of the snake progressing forward
@@ -492,17 +492,17 @@ def evalGenomes(population, generations, mutation_type='gaussian', food_energy=3
                     severus.direction=(-1,0)
                     
                     
-                if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)) or severus.direction==(1,0):
+                if (snake_actions[np.argmax(nn_output)]=='RIGHT' and severus.direction!=(-1,0)):
                     severus.components[-1].position=(severus.components[0].position[0]+1,severus.components[0].position[1])
                     severus.components=[severus.components.pop()]+severus.components
                     severus.direction=(1,0)
                     
-                if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)) or severus.direction==(0,-1):
+                if (snake_actions[np.argmax(nn_output)]=='UP' and severus.direction!=(0,1)):
                     severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]-1)
                     severus.components=[severus.components.pop()]+severus.components
                     severus.direction=(0,-1)
                     
-                if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)) or severus.direction==(0,1):
+                if (snake_actions[np.argmax(nn_output)]=='DOWN' and severus.direction!=(0,-1)):
                     severus.components[-1].position=(severus.components[0].position[0],severus.components[0].position[1]+1)
                     severus.components=[severus.components.pop()]+severus.components
                     severus.direction=(0,1)

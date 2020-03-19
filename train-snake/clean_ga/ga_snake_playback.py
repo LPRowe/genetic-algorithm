@@ -265,7 +265,9 @@ def nonlethalOptions(_snake, grid_rows, grid_columns):
     head_position=_snake.components[0].position
     
     #space currently inhabited by the snakes tail
-    snake_space=_snake.snake_space()[1:]
+    #1 since snake cannot move to its head position and -1 since the tails tip
+    #will always vacate its position
+    snake_space=_snake.snake_space()[1:-1]
     
     options=[basicInstincts(head_position, snake_space, direction, grid_rows, grid_columns) for direction in ['RIGHT','UP','LEFT','DOWN']]
     
@@ -430,7 +432,7 @@ def runBestSnakes(basic_instincts=True, play_top_n_gen=10, colorful=True, clock_
     while run:
         #Set the speed the game runs at playing: (50,20) | training (0,comment out)
         if watch:
-            pygame.time.delay(50)
+            pygame.time.delay(10)
             clock.tick(clock_speed)
         
         #Every time step, severus loses one energy [kcal]
@@ -584,9 +586,9 @@ def runBestSnakes(basic_instincts=True, play_top_n_gen=10, colorful=True, clock_
                 gen=gen % len(nets) #If on the last generation loop back to the first generation
                 severus=snakes[gen]
             elif keys[pygame.K_UP]:
-                clock_speed+=1
+                clock_speed+=2
             elif keys[pygame.K_DOWN]:
-                clock_speed-=1
+                clock_speed-=2
         
         game_on=True
         

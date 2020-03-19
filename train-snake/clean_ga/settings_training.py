@@ -17,13 +17,13 @@ settings = {
         'population' : 500, 
         
         #how many generations to run for
-        'generations' : 50,
+        'generations' : 35,
         
         #Once a snake scores a score of fitness_threshold the training will stop
         'fitness_threshold' : 200,
         
         #Probability of a gene mutating
-        'mutation_rate' : 0.005,
+        'mutation_rate' : 0.00125,
         
         #mutation gaussian or uniform (other will assume uniform) gaussian adds np.random.normal() to mutated chromosomes
         'mutation_type' : 'gaussian',
